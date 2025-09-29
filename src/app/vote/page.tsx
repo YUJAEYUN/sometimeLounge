@@ -10,7 +10,15 @@ import Loading from '@/components/ui/loading'
 import {
   getCurrentUser,
   getProfile,
-  type Profile
+  submitVotes,
+  signOut,
+  isAdmin,
+  getVotingStatusForTimeSlot,
+  getResultsStatusForTimeSlot,
+  getMatches,
+  supabase,
+  type Profile,
+  type MatchResult
 } from '@/lib/supabase'
 
 export default function VotePage() {
@@ -18,7 +26,10 @@ export default function VotePage() {
   const [selectedVotes, setSelectedVotes] = useState<string[]>([])
   const [existingVotes, setExistingVotes] = useState<string[]>([])
   const [matches, setMatches] = useState<MatchResult[]>([])
+  const [availableProfiles, setAvailableProfiles] = useState<Profile[]>([])
   const [votingOpen, setVotingOpen] = useState(false)
+  const [resultsOpen, setResultsOpen] = useState(false)
+  const [userIsAdmin, setUserIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -34,6 +45,10 @@ export default function VotePage() {
           return
         }
 
+        // Check if user is admin
+        const adminStatus = isAdmin()
+        setUserIsAdmin(adminStatus)
+
         // Load profile
         const { data: profileData, error: profileError } = await getProfile()
         if (profileError || !profileData) {
@@ -42,8 +57,25 @@ export default function VotePage() {
         }
         setProfile(profileData)
 
-        // For now, set voting as open
-        setVotingOpen(true)
+        // Load voting status for current user's time slot
+        const { data: votingData } = await getVotingStatusForTimeSlot(profileData.event_day, profileData.event_time)
+        setVotingOpen(votingData?.voting_open || false)
+
+        // Load results status for current user's time slot
+        const { data: resultsData } = await getResultsStatusForTimeSlot(profileData.event_day, profileData.event_time)
+        setResultsOpen(resultsData?.results_open || false)
+
+        // Load available profiles for voting (opposite gender, same time slot)
+        const oppositeGender = profileData.gender === '남자' ? '여자' : '남자'
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('event_day', profileData.event_day)
+          .eq('event_time', profileData.event_time)
+          .eq('gender', oppositeGender)
+          .order('participant_number')
+
+        setAvailableProfiles(profiles || [])
 
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.')
@@ -54,6 +86,19 @@ export default function VotePage() {
 
     loadData()
   }, [router])
+
+  const loadMatches = async () => {
+    try {
+      const { data: matchData, error: matchError } = await getMatches()
+      if (matchError) {
+        console.error('Failed to load matches:', matchError)
+        return
+      }
+      setMatches(matchData || [])
+    } catch (err) {
+      console.error('Error loading matches:', err)
+    }
+  }
 
   const handleVoteChange = (participantId: string, checked: boolean) => {
     if (checked) {
@@ -84,12 +129,13 @@ export default function VotePage() {
   }
 
   const getOppositeGenderNumbers = () => {
-    if (!profile) return []
-    const oppositeGender = profile.gender === '남자' ? '여자' : '남자'
-    return [1, 2, 3, 4, 5, 6].map(num => ({
-      number: num,
-      label: `${num}번 ${oppositeGender}`,
-      id: `${profile.event_day}-${profile.event_time}-${oppositeGender}-${num}`
+    if (!profile || !availableProfiles.length) return []
+
+    return availableProfiles.map(targetProfile => ({
+      number: targetProfile.participant_number,
+      label: `${targetProfile.participant_number}번 ${targetProfile.gender}`,
+      id: targetProfile.id, // Use actual profile ID as vote ID
+      profileId: targetProfile.id
     }))
   }
 
@@ -131,6 +177,20 @@ export default function VotePage() {
           </p>
         </div>
 
+        {/* Admin Link */}
+        {userIsAdmin && (
+          <div className="text-center">
+            <Button
+              onClick={() => router.push('/admin')}
+              variant="outline"
+              size="sm"
+              className="vintage-border"
+            >
+              관리자 페이지
+            </Button>
+          </div>
+        )}
+
         {/* Toggle between voting and results */}
         <div className="flex gap-2">
           <Button
@@ -142,12 +202,25 @@ export default function VotePage() {
           </Button>
           <Button
             variant={showResults ? "default" : "outline"}
-            onClick={() => setShowResults(true)}
+            onClick={async () => {
+              setShowResults(true)
+              if (!showResults) {
+                await loadMatches()
+              }
+            }}
             className={showResults ? "vintage-button" : "vintage-border"}
+            disabled={!resultsOpen && !userIsAdmin}
           >
             결과보기
           </Button>
         </div>
+
+        {/* Results access message */}
+        {!resultsOpen && !userIsAdmin && showResults && (
+          <div className="text-center p-4 bg-muted/50 rounded vintage-border">
+            <p className="text-muted-foreground">결과는 관리자가 공개할 때까지 기다려주세요.</p>
+          </div>
+        )}
 
         {!showResults ? (
           /* Voting Section */
@@ -202,7 +275,11 @@ export default function VotePage() {
         ) : (
           /* Results Section */
           <div className="space-y-4">
-            {matches.length > 0 ? (
+            {!resultsOpen && !userIsAdmin ? (
+              <div className="text-center p-4 bg-muted/50 rounded vintage-border">
+                <p className="text-muted-foreground">결과는 관리자가 공개할 때까지 기다려주세요.</p>
+              </div>
+            ) : matches.length > 0 ? (
               <>
                 <div className="text-center p-4 bg-primary/10 rounded vintage-border">
                   <h3 className="vintage-title text-lg text-primary">매칭 성공! 🥳</h3>
@@ -243,7 +320,7 @@ export default function VotePage() {
           <Button
             variant="outline"
             onClick={async () => {
-              await supabase.auth.signOut()
+              await signOut()
               router.push('/auth')
             }}
             className="w-full vintage-border"

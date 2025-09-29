@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getCurrentUser, getProfile } from '@/lib/supabase'
+import { getCurrentUser, getProfile, isAdmin } from '@/lib/supabase'
 import VintageLayout from '@/components/layout/VintageLayout'
 import Loading from '@/components/ui/loading'
 
@@ -14,6 +14,12 @@ export default function Home() {
       const { user } = getCurrentUser()
 
       if (user) {
+        // Check if user is admin
+        if (isAdmin()) {
+          router.push('/admin')
+          return
+        }
+
         // User is logged in, check if profile exists
         const { data: profile } = await getProfile()
 

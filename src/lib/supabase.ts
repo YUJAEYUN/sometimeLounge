@@ -7,14 +7,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Types based on actual database schema
 export interface User {
-  id: number
+  id: number // int4, PK in users table
   student_id: string
   password_hash: string
   created_at?: string
 }
 
 export interface Profile {
-  id: string // UUID
+  id: string // UUID, foreign key to auth.users.id
   student_id: string
   phone_number?: string
   event_day?: string
@@ -23,7 +23,7 @@ export interface Profile {
   participant_number?: number
   created_at?: string
   updated_at?: string
-  user_id?: number
+  user_id: number // foreign key to users.id
 }
 
 export interface Vote {
@@ -31,7 +31,17 @@ export interface Vote {
   voter_profile_id: string // UUID
   voted_for_profile_id: string // UUID
   created_at?: string
-  user_id?: number
+  user_id: number // foreign key to users.id
+}
+
+export interface MatchResult {
+  matched_user_id: number
+  matched_participant_number: number
+  matched_gender: string
+  matched_student_id: string
+  matched_phone_number?: string
+  event_day: string
+  event_time: string
 }
 
 export interface AppSettings {
@@ -41,12 +51,22 @@ export interface AppSettings {
   updated_at?: string
 }
 
-// Custom auth helper functions using student ID and password
+export interface TimeSlotSettings {
+  id: number
+  event_day: string
+  event_time: string
+  voting_open: boolean
+  results_open: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+// Custom auth using only student ID and password
 export const signUp = async (studentId: string, password: string) => {
   try {
     // Hash password (in production, use bcrypt or similar)
     const passwordHash = btoa(password) // Simple base64 encoding for demo
-    
+
     const { data, error } = await supabase
       .from('users')
       .insert([
@@ -54,7 +74,7 @@ export const signUp = async (studentId: string, password: string) => {
       ])
       .select()
       .single()
-    
+
     if (error) {
       // Check for duplicate student ID error
       if (error.code === '23505' && error.message.includes('student_id')) {
@@ -62,7 +82,7 @@ export const signUp = async (studentId: string, password: string) => {
       }
       return { data: null, error: error.message }
     }
-    
+
     return { data, error: null }
   } catch (err) {
     return { data: null, error: 'Registration failed' }
@@ -72,21 +92,21 @@ export const signUp = async (studentId: string, password: string) => {
 export const signIn = async (studentId: string, password: string) => {
   try {
     const passwordHash = btoa(password) // Simple base64 encoding for demo
-    
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('student_id', studentId)
       .eq('password_hash', passwordHash)
       .single()
-    
+
     if (error || !data) {
       return { data: null, error: 'Invalid student ID or password' }
     }
-    
+
     // Store user session in localStorage
     localStorage.setItem('currentUser', JSON.stringify(data))
-    
+
     return { data, error: null }
   } catch (err) {
     return { data: null, error: 'Login failed' }
@@ -121,15 +141,15 @@ export const createProfile = async (profileData: Omit<Profile, 'id' | 'student_i
   const { user } = getCurrentUser()
   if (!user) throw new Error('User not authenticated')
 
-  // Generate UUID for the profile
+  // Generate a UUID for the profile
   const profileId = crypto.randomUUID()
 
   const { data, error } = await supabase
     .from('profiles')
     .insert({
-      id: profileId,
+      id: profileId, // Generate new UUID for profile
       student_id: user.student_id,
-      user_id: user.id,
+      user_id: user.id, // Reference to custom users table
       ...profileData
     })
     .select()
@@ -198,6 +218,46 @@ export const getUserVote = async () => {
   return { data, error }
 }
 
+// Submit multiple votes
+export const submitVotes = async (selectedVotes: string[]) => {
+  const { user } = getCurrentUser()
+  if (!user) throw new Error('User not authenticated')
+
+  // Get current user's profile to get the profile ID
+  const { data: profile, error: profileError } = await getProfile()
+  if (profileError || !profile) {
+    return { data: null, error: 'Profile not found' }
+  }
+
+  try {
+    // First, delete existing votes for this user
+    await supabase
+      .from('votes')
+      .delete()
+      .eq('user_id', user.id)
+
+    // Create new votes - selectedVotes now contains actual profile IDs
+    const votesToInsert = selectedVotes.map(targetProfileId => ({
+      voter_profile_id: profile.id,
+      voted_for_profile_id: targetProfileId,
+      user_id: user.id
+    }))
+
+    if (votesToInsert.length === 0) {
+      return { data: null, error: 'No valid targets found for votes' }
+    }
+
+    const { data, error } = await supabase
+      .from('votes')
+      .insert(votesToInsert)
+      .select()
+
+    return { data, error }
+  } catch (err) {
+    return { data: null, error: 'Failed to submit votes' }
+  }
+}
+
 // App settings helper functions
 export const getAppSettings = async () => {
   const { data, error } = await supabase
@@ -213,6 +273,256 @@ export const updateAppSettings = async (settings: Partial<Omit<AppSettings, 'id'
     .from('app_settings')
     .update(settings)
     .eq('id', 1)
+    .select()
+    .single()
+
+  return { data, error }
+}
+
+// Admin functions
+const ADMIN_STUDENT_IDS = ['admin', '20211072'] // Add admin student IDs here
+
+export const isAdmin = () => {
+  const { user } = getCurrentUser()
+  return user && ADMIN_STUDENT_IDS.includes(user.student_id)
+}
+
+export const getVotingStatus = async () => {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('*')
+    .eq('key', 'voting_open')
+    .single()
+
+  if (error && error.code === 'PGRST116') {
+    // Setting doesn't exist, create it
+    const { data: newData, error: createError } = await supabase
+      .from('app_settings')
+      .insert({ key: 'voting_open', value: 'false' })
+      .select()
+      .single()
+
+    return { data: newData, error: createError }
+  }
+
+  return { data, error }
+}
+
+export const setVotingStatus = async (isOpen: boolean) => {
+  // First try to update existing record
+  const { data: updateData, error: updateError } = await supabase
+    .from('app_settings')
+    .update({ value: isOpen.toString() })
+    .eq('key', 'voting_open')
+    .select()
+    .single()
+
+  if (updateError && updateError.code === 'PGRST116') {
+    // Record doesn't exist, create it
+    const { data: insertData, error: insertError } = await supabase
+      .from('app_settings')
+      .insert({ key: 'voting_open', value: isOpen.toString() })
+      .select()
+      .single()
+
+    return { data: insertData, error: insertError }
+  }
+
+  return { data: updateData, error: updateError }
+}
+
+export const getResultsStatus = async () => {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('*')
+    .eq('key', 'results_open')
+    .single()
+
+  if (error && error.code === 'PGRST116') {
+    // Setting doesn't exist, create it
+    const { data: newData, error: createError } = await supabase
+      .from('app_settings')
+      .insert({ key: 'results_open', value: 'false' })
+      .select()
+      .single()
+
+    return { data: newData, error: createError }
+  }
+
+  return { data, error }
+}
+
+export const setResultsStatus = async (isOpen: boolean) => {
+  // First try to update existing record
+  const { data: updateData, error: updateError } = await supabase
+    .from('app_settings')
+    .update({ value: isOpen.toString() })
+    .eq('key', 'results_open')
+    .select()
+    .single()
+
+  if (updateError && updateError.code === 'PGRST116') {
+    // Record doesn't exist, create it
+    const { data: insertData, error: insertError } = await supabase
+      .from('app_settings')
+      .insert({ key: 'results_open', value: isOpen.toString() })
+      .select()
+      .single()
+
+    return { data: insertData, error: insertError }
+  }
+
+  return { data: updateData, error: updateError }
+}
+
+// Get matches for current user
+export const getMatches = async (): Promise<{ data: MatchResult[] | null, error: string | null }> => {
+  try {
+    const { user } = getCurrentUser()
+    if (!user) {
+      return { data: null, error: 'User not authenticated' }
+    }
+
+    const { data: profile } = await getProfile()
+    if (!profile) {
+      return { data: null, error: 'Profile not found' }
+    }
+
+    // Step 1: Get profiles that current user voted for
+    const { data: myVotes, error: myVotesError } = await supabase
+      .from('votes')
+      .select('voted_for_profile_id')
+      .eq('voter_profile_id', profile.id)
+
+    if (myVotesError) {
+      return { data: null, error: myVotesError.message }
+    }
+
+    if (!myVotes || myVotes.length === 0) {
+      return { data: [], error: null }
+    }
+
+    const votedForProfileIds = myVotes.map(vote => vote.voted_for_profile_id)
+
+    // Step 2: Find profiles that also voted for current user (mutual matches)
+    const { data: mutualVotes, error: mutualVotesError } = await supabase
+      .from('votes')
+      .select('voter_profile_id')
+      .eq('voted_for_profile_id', profile.id)
+      .in('voter_profile_id', votedForProfileIds)
+
+    if (mutualVotesError) {
+      return { data: null, error: mutualVotesError.message }
+    }
+
+    if (!mutualVotes || mutualVotes.length === 0) {
+      return { data: [], error: null }
+    }
+
+    const mutualProfileIds = mutualVotes.map(vote => vote.voter_profile_id)
+
+    // Step 3: Get profile details for mutual matches
+    const { data: matchedProfiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        participant_number,
+        gender,
+        event_day,
+        event_time,
+        phone_number,
+        users!profiles_user_id_fkey (
+          id,
+          student_id
+        )
+      `)
+      .in('id', mutualProfileIds)
+
+    if (profilesError) {
+      return { data: null, error: profilesError.message }
+    }
+
+    // Transform the data to match MatchResult interface
+    const matchResults: MatchResult[] = (matchedProfiles || []).map(profile => {
+      const user = Array.isArray(profile.users) ? profile.users[0] : profile.users
+      return {
+        matched_user_id: user?.id || 0,
+        matched_participant_number: profile.participant_number || 0,
+        matched_gender: profile.gender || '',
+        matched_student_id: user?.student_id || '',
+        matched_phone_number: profile.phone_number,
+        event_day: profile.event_day || '',
+        event_time: profile.event_time || ''
+      }
+    })
+
+    return { data: matchResults, error: null }
+  } catch (err) {
+    return { data: null, error: 'Failed to get matches' }
+  }
+}
+
+// Get all time slot settings
+export const getTimeSlotSettings = async () => {
+  const { data, error } = await supabase
+    .from('time_slot_settings')
+    .select('*')
+    .order('event_day', { ascending: true })
+    .order('event_time', { ascending: true })
+
+  return { data, error }
+}
+
+// Get voting status for specific time slot
+export const getVotingStatusForTimeSlot = async (eventDay: string, eventTime: string) => {
+  const { data, error } = await supabase
+    .from('time_slot_settings')
+    .select('voting_open')
+    .eq('event_day', eventDay)
+    .eq('event_time', eventTime)
+    .single()
+
+  return { data, error }
+}
+
+// Get results status for specific time slot
+export const getResultsStatusForTimeSlot = async (eventDay: string, eventTime: string) => {
+  const { data, error } = await supabase
+    .from('time_slot_settings')
+    .select('results_open')
+    .eq('event_day', eventDay)
+    .eq('event_time', eventTime)
+    .single()
+
+  return { data, error }
+}
+
+// Set voting status for specific time slot
+export const setVotingStatusForTimeSlot = async (eventDay: string, eventTime: string, isOpen: boolean) => {
+  const { data, error } = await supabase
+    .from('time_slot_settings')
+    .update({
+      voting_open: isOpen,
+      updated_at: new Date().toISOString()
+    })
+    .eq('event_day', eventDay)
+    .eq('event_time', eventTime)
+    .select()
+    .single()
+
+  return { data, error }
+}
+
+// Set results status for specific time slot
+export const setResultsStatusForTimeSlot = async (eventDay: string, eventTime: string, isOpen: boolean) => {
+  const { data, error } = await supabase
+    .from('time_slot_settings')
+    .update({
+      results_open: isOpen,
+      updated_at: new Date().toISOString()
+    })
+    .eq('event_day', eventDay)
+    .eq('event_time', eventTime)
     .select()
     .single()
 

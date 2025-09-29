@@ -64,7 +64,7 @@ export default function ProfilePage() {
   }
 
   const eventDays = ['월', '화', '수']
-  const eventTimes = ['18:00', '18:30', '19:00', '19:30', '20:00']
+  const eventTimes = ['18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00']
   const genders = ['남자', '여자']
   const participantNumbers = [1, 2, 3, 4, 5, 6]
 
