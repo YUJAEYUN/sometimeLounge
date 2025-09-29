@@ -1,7 +1,7 @@
 const QRCode = require('qrcode')
 const fs = require('fs')
 
-const url = 'https://sometime-lounge-cv57d633r-jaeyunyus-projects.vercel.app'
+const url = 'https://sometime-lounge.vercel.app'
 
 // Generate QR code as PNG
 QRCode.toFile('qr-code.png', url, {
