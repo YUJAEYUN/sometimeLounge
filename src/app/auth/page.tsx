@@ -37,7 +37,7 @@ export default function AuthPage() {
         
         const { error } = await signUp(studentId, password)
         if (error) {
-          setError(error.message)
+          setError(error)
           return
         }
         

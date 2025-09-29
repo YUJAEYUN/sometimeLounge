@@ -7,15 +7,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import VintageLayout from '@/components/layout/VintageLayout'
 import Loading from '@/components/ui/loading'
-import { 
-  supabase, 
-  getProfile, 
-  submitVotes, 
-  getMyVotes, 
-  isVotingOpen,
-  getMyMatches,
-  type Profile,
-  type MatchResult
+import {
+  getCurrentUser,
+  getProfile,
+  type Profile
 } from '@/lib/supabase'
 
 export default function VotePage() {
@@ -33,8 +28,8 @@ export default function VotePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) {
+        const { user } = getCurrentUser()
+        if (!user) {
           router.push('/auth')
           return
         }
@@ -47,23 +42,8 @@ export default function VotePage() {
         }
         setProfile(profileData)
 
-        // Check voting status
-        const { data: votingStatus } = await isVotingOpen()
-        setVotingOpen(votingStatus)
-
-        // Load existing votes
-        const { data: votesData } = await getMyVotes()
-        if (votesData) {
-          const voteIds = votesData.map(vote => vote.voted_for_profile_id)
-          setExistingVotes(voteIds)
-          setSelectedVotes(voteIds)
-        }
-
-        // Load matches
-        const { data: matchesData } = await getMyMatches()
-        if (matchesData) {
-          setMatches(matchesData)
-        }
+        // For now, set voting as open
+        setVotingOpen(true)
 
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.')

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import VintageLayout from '@/components/layout/VintageLayout'
-import { createProfile, supabase } from '@/lib/supabase'
+import { createProfile, getCurrentUser } from '@/lib/supabase'
 
 export default function ProfilePage() {
   const [eventDay, setEventDay] = useState('')
@@ -20,9 +20,9 @@ export default function ProfilePage() {
   const router = useRouter()
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+    const checkAuth = () => {
+      const { user } = getCurrentUser()
+      if (!user) {
         router.push('/auth')
       }
     }
@@ -35,19 +35,16 @@ export default function ProfilePage() {
     setError('')
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { user } = getCurrentUser()
       if (!user) {
         router.push('/auth')
         return
       }
 
-      const studentId = user.email?.split('@')[0] || ''
-
       const { error } = await createProfile({
-        student_id: studentId,
         event_day: eventDay,
         event_time: eventTime,
-        gender,
+        gender: gender,
         participant_number: parseInt(participantNumber),
         phone_number: phoneNumber
       })

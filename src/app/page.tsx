@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getCurrentUser, getProfile } from '@/lib/supabase'
 import VintageLayout from '@/components/layout/VintageLayout'
 import Loading from '@/components/ui/loading'
 
@@ -11,15 +11,11 @@ export default function Home() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { user } = getCurrentUser()
 
-      if (session) {
+      if (user) {
         // User is logged in, check if profile exists
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
+        const { data: profile } = await getProfile()
 
         if (profile) {
           // Profile exists, go to voting/results page
