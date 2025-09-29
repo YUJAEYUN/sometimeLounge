@@ -1,36 +1,147 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SOMETIME LOUNGE
 
-## Getting Started
+### 🏗️ **전체 아키텍처**
 
-First, run the development server:
+- **프론트엔드**: Next.js 15.5.4 (App Router)
+- **백엔드**: Supabase (PostgreSQL + REST API)
+- **인증**: 커스텀 인증 시스템 (학번 + 비밀번호)
+- **상태관리**: localStorage + React useState
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+### 🔐 **1. 인증 시스템 (Custom Authentication)**
+
+**회원가입 플로우:**
+
+```
+학번 + 비밀번호 입력 → users 테이블에 저장 (btoa 해싱) → 자동 로그인 → 프로필 페이지로 이동
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**로그인 플로우:**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+학번 + 비밀번호 확인 → localStorage에 세션 저장 → 메인 페이지로 리다이렉트
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**권한 분기:**
 
-## Learn More
+- **관리자**: `admin`, `20211072` 학번 → `/admin` 페이지
+- **일반 사용자**: 프로필 유무에 따라 `/profile` 또는 `/vote` 페이지
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 👤 **2. 프로필 관리**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**프로필 생성:**
 
-## Deploy on Vercel
+```
+요일(월/화/수) + 시간(18:00-22:00, 30분단위) + 성별 + 번호(1-6) + 전화번호 → profiles 테이블 저장
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**데이터 구조:**
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `profiles.id`: UUID (메인 식별자)
+- `profiles.user_id`: users 테이블 참조
+- **한 번 저장하면 수정 불가**
+
+---
+
+### 🗳️ **3. 투표 시스템**
+
+**투표 가능 조건:**
+
+1. 관리자가 해당 시간대의 `voting_open = true`로 설정
+2. 같은 요일/시간대의 반대 성별만 투표 대상으로 표시
+
+**투표 프로세스:**
+
+```
+반대 성별 프로필 목록 로드 → 체크박스로 다중 선택 → votes 테이블에 저장
+```
+
+**투표 데이터:**
+
+- `voter_profile_id`: 투표자 프로필 ID
+- `voted_for_profile_id`: 투표 대상 프로필 ID
+- **기존 투표 삭제 후 새로 저장** (덮어쓰기 방식)
+
+---
+
+### 💕 **4. 매칭 로직 (상호 투표 확인)**
+
+**3단계 매칭 알고리즘:**
+
+```
+1단계: 내가 투표한 프로필들 조회
+2단계: 그 중에서 나에게도 투표한 프로필들 찾기 (상호 투표)
+3단계: 상호 투표된 프로필들의 상세 정보 반환
+```
+
+**매칭 결과 표시:**
+
+- 매칭된 상대방의 번호, 성별, 학번, 전화번호 표시
+- **결과 공개는 관리자가 시간대별로 제어**
+
+---
+
+### ⚙️ **5. 관리자 시스템**
+
+**시간대별 제어:**
+
+- **요일 선택**: 월/화/수
+- **시간 선택**: 18:00-22:00 (30분 단위)
+- **개별 제어**: 각 시간대마다 투표/결과 열기/닫기 독립적으로 관리
+
+**관리 기능:**
+
+- 실시간 통계 (총 사용자, 프로필, 투표 수, 성별 분포)
+- 참가자 목록 조회
+- 시간대별 투표/결과 상태 제어
+
+---
+
+### 🔄 **6. 페이지 라우팅 로직**
+
+**메인 페이지 (`/`) 분기:**
+
+```
+로그인 안됨 → /auth
+관리자 → /admin
+프로필 없음 → /profile
+프로필 있음 → /vote
+```
+
+**권한별 접근 제어:**
+
+- 투표: 해당 시간대 `voting_open = true`일 때만
+- 결과: 해당 시간대 `results_open = true`이거나 관리자일 때만
+
+---
+
+### 📊 **7. 데이터베이스 구조**
+
+**핵심 테이블:**
+
+- `users`: 커스텀 인증 (학번, 비밀번호)
+- `profiles`: 사용자 프로필 정보
+- `votes`: 투표 데이터
+- `time_slot_settings`: 시간대별 투표/결과 상태 관리
+
+**관계:**
+
+```
+users (1) ←→ (1) profiles
+profiles (1) ←→ (N) votes (voter)
+profiles (1) ←→ (N) votes (voted_for)
+```
+
+---
+
+### 🎯 **8. 핵심 비즈니스 규칙**
+
+1. **학번 기반 인증**: 이메일 없이 학번만으로 가입/로그인
+2. **시간대별 격리**: 같은 요일/시간대 내에서만 매칭
+3. **상호 투표 매칭**: 양방향 투표가 있어야만 매칭 성공
+4. **관리자 중심 제어**: 모든 투표/결과 공개는 관리자가 시간대별로 제어
+5. **프로필 불변성**: 한 번 입력한 프로필은 수정 불가
+6. **실시간 권한 확인**: 페이지 접근 시마다 해당 시간대 권한 확인
