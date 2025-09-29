@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Crimson+Text:wght@400;600&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
@@ -8,6 +9,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: 'Playfair Display', serif;
+  --font-body: 'Crimson Text', serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -45,24 +48,25 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.147 0.004 49.25);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.147 0.004 49.25);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.147 0.004 49.25);
-  --primary: oklch(0.216 0.006 56.043);
-  --primary-foreground: oklch(0.985 0.001 106.423);
-  --secondary: oklch(0.97 0.001 106.424);
-  --secondary-foreground: oklch(0.216 0.006 56.043);
-  --muted: oklch(0.97 0.001 106.424);
-  --muted-foreground: oklch(0.553 0.013 58.071);
-  --accent: oklch(0.97 0.001 106.424);
-  --accent-foreground: oklch(0.216 0.006 56.043);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.923 0.003 48.717);
-  --input: oklch(0.923 0.003 48.717);
-  --ring: oklch(0.709 0.01 56.259);
+  /* Vintage Lounge Theme - Beige/Cream background with dark brown text */
+  --background: #f7f3e9; /* Warm cream background */
+  --foreground: #2d1810; /* Dark brown text */
+  --card: #faf7f0; /* Slightly lighter cream for cards */
+  --card-foreground: #2d1810;
+  --popover: #faf7f0;
+  --popover-foreground: #2d1810;
+  --primary: #8b4513; /* Saddle brown for primary elements */
+  --primary-foreground: #f7f3e9;
+  --secondary: #d2b48c; /* Tan for secondary elements */
+  --secondary-foreground: #2d1810;
+  --muted: #e6ddd4; /* Muted beige */
+  --muted-foreground: #5d4e37; /* Medium brown */
+  --accent: #cd853f; /* Peru color for accents */
+  --accent-foreground: #2d1810;
+  --destructive: #a0522d; /* Sienna for destructive actions */
+  --border: #d2b48c; /* Tan borders */
+  --input: #f0ead6; /* Light beige for inputs */
+  --ring: #8b4513; /* Saddle brown for focus rings */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -118,5 +122,54 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Crimson Text', serif;
   }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+/* Vintage newspaper/lounge styling */
+.vintage-container {
+  background: var(--background);
+  border: 2px solid var(--border);
+  box-shadow: 0 4px 8px rgba(45, 24, 16, 0.1);
+}
+
+.vintage-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  color: var(--foreground);
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+.vintage-subtitle {
+  font-family: 'Playfair Display', serif;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-style: italic;
+}
+
+.vintage-border {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.vintage-button {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 2px solid var(--primary);
+  font-family: 'Playfair Display', serif;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  transition: all 0.2s ease;
+}
+
+.vintage-button:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(45, 24, 16, 0.2);
 }
