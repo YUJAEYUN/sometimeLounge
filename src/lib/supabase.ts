@@ -61,56 +61,51 @@ export interface TimeSlotSettings {
   updated_at?: string
 }
 
-// Custom auth using only student ID and password
-export const signUp = async (studentId: string, password: string) => {
+// Custom auth using only student ID (auto signup/login)
+export const signInOrSignUp = async (studentId: string) => {
   try {
-    // Hash password (in production, use bcrypt or similar)
-    const passwordHash = btoa(password) // Simple base64 encoding for demo
+    // First, try to find existing user
+    const { data: existingUser, error: findError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('student_id', studentId)
+      .single()
 
-    const { data, error } = await supabase
+    // If user exists, log them in
+    if (existingUser && !findError) {
+      localStorage.setItem('currentUser', JSON.stringify(existingUser))
+      return { data: existingUser, error: null, isNewUser: false }
+    }
+
+    // If user doesn't exist, create new user (auto signup)
+    const { data: newUser, error: createError } = await supabase
       .from('users')
       .insert([
-        { student_id: studentId, password_hash: passwordHash }
+        { student_id: studentId, password_hash: '' } // Empty password hash since we don't use passwords
       ])
       .select()
       .single()
 
-    if (error) {
-      // Check for duplicate student ID error
-      if (error.code === '23505' && error.message.includes('student_id')) {
-        return { data: null, error: '이미 가입된 학번입니다.' }
-      }
-      return { data: null, error: error.message }
-    }
-
-    return { data, error: null }
-  } catch (err) {
-    return { data: null, error: 'Registration failed' }
-  }
-}
-
-export const signIn = async (studentId: string, password: string) => {
-  try {
-    const passwordHash = btoa(password) // Simple base64 encoding for demo
-
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('password_hash', passwordHash)
-      .single()
-
-    if (error || !data) {
-      return { data: null, error: 'Invalid student ID or password' }
+    if (createError) {
+      return { data: null, error: createError.message, isNewUser: false }
     }
 
     // Store user session in localStorage
-    localStorage.setItem('currentUser', JSON.stringify(data))
+    localStorage.setItem('currentUser', JSON.stringify(newUser))
 
-    return { data, error: null }
+    return { data: newUser, error: null, isNewUser: true }
   } catch (err) {
-    return { data: null, error: 'Login failed' }
+    return { data: null, error: 'Login/Signup failed', isNewUser: false }
   }
+}
+
+// Legacy functions kept for backward compatibility (deprecated)
+export const signUp = async (studentId: string, password: string = '') => {
+  return signInOrSignUp(studentId)
+}
+
+export const signIn = async (studentId: string, password: string = '') => {
+  return signInOrSignUp(studentId)
 }
 
 export const signOut = async () => {
