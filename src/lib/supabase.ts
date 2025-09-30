@@ -275,7 +275,7 @@ export const updateAppSettings = async (settings: Partial<Omit<AppSettings, 'id'
 }
 
 // Admin functions
-const ADMIN_STUDENT_IDS = ['admin', '20211072'] // Add admin student IDs here
+const ADMIN_STUDENT_IDS = ['admin', 'adminadmin'] // Add admin student IDs here
 
 export const isAdmin = () => {
   const { user } = getCurrentUser()
